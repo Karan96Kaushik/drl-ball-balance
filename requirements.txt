@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+websockets>=10.0,<13.0
+gymnasium==1.0.0
+stable-baselines3
+numpy
+torch>=1.12.0
+torchvision
+tensorboard
+requests
