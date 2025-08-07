@@ -1,4 +1,5 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 import uvicorn
 import asyncio
 import logging
@@ -221,6 +222,11 @@ async def legacy_websocket_endpoint(websocket: WebSocket):
     logger.warning("Connection to legacy /ws/legacy endpoint - please update client")
     # For now, treat as frontend connection
     await frontend_websocket_endpoint(websocket)
+
+from fastapi.staticfiles import StaticFiles
+
+# Mount the public directory to serve static files
+app.mount("/", StaticFiles(directory="../public", html=True), name="public")
 
 @app.on_event("startup")
 async def startup_event():
