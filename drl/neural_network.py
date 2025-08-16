@@ -238,6 +238,11 @@ class ActorCriticAgent:
         self.rewards_history = []
         self.recent_actions = deque(maxlen=1000)  # Store recent actions for analysis
         
+        # Episode storage for Monte Carlo updates
+        self.episode_states = []
+        self.episode_actions = []
+        self.episode_rewards = []
+        
         logger.info(f"Actor-Critic agent initialized")
         logger.info(f"Actor network: {sum(p.numel() for p in self.actor.parameters())} parameters")
         logger.info(f"Critic network: {sum(p.numel() for p in self.critic.parameters())} parameters")
@@ -323,6 +328,82 @@ class ActorCriticAgent:
         self.train_step += 1
         
         return actor_loss.item(), critic_loss.item()
+
+    # ===== Monte Carlo (episode-return) training API =====
+    def start_episode(self):
+        """Initialize storage for a new episode."""
+        self.episode_states = []
+        self.episode_actions = []
+        self.episode_rewards = []
+
+    def record_step(self, state, action, reward, done):
+        """Record a single step for MC training."""
+        self.episode_states.append(np.array(state, dtype=np.float32))
+        self.episode_actions.append(np.array(action, dtype=np.float32))
+        self.episode_rewards.append(float(reward))
+
+    def _compute_returns(self, rewards):
+        """Compute reward-to-go returns G_t for an episode."""
+        returns = []
+        G = 0.0
+        for r in reversed(rewards):
+            G = float(r) + self.gamma * G
+            returns.append(G)
+        returns.reverse()
+        return np.array(returns, dtype=np.float32)
+
+    def update_from_episode(self):
+        """Perform a Monte Carlo policy gradient update using the collected episode."""
+        if len(self.episode_rewards) == 0:
+            return None, None
+
+        # Convert episode data to tensors
+        states = torch.FloatTensor(np.stack(self.episode_states)).to(self.device)
+        actions = torch.FloatTensor(np.stack(self.episode_actions)).to(self.device)
+        # print(f"Episode rewards: {self.episode_rewards}")
+        returns_np = self._compute_returns(self.episode_rewards)
+        returns = torch.FloatTensor(returns_np).to(self.device)
+
+        # Critic estimates
+        values = self.critic(states).squeeze(1)
+
+        # Advantages (optionally normalize for stability)
+        advantages = returns - values.detach()
+        if advantages.numel() > 1:
+            advantages = (advantages - advantages.mean()) / (advantages.std(unbiased=False) + 1e-8)
+
+        # Log probabilities under current policy (with gradient)
+        action_means = self.actor(states)
+        action_std = torch.exp(self.actor.log_std)
+        dist = torch.distributions.Normal(action_means, action_std)
+        log_probs = dist.log_prob(actions).sum(dim=-1)
+
+        # Compute losses
+        actor_loss = -(log_probs * advantages).mean()
+        critic_loss = F.mse_loss(values, returns)
+
+        # Optimize
+        self.actor_optimizer.zero_grad()
+        self.critic_optimizer.zero_grad()
+        actor_loss.backward()
+        critic_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
+        self.actor_optimizer.step()
+        self.critic_optimizer.step()
+
+        # Update target networks (kept for consistency)
+        self.update_target_networks()
+
+        # Statistics
+        self.actor_losses.append(float(actor_loss.item()))
+        self.critic_losses.append(float(critic_loss.item()))
+        self.train_step += 1
+
+        # Clear episode storage
+        self.start_episode()
+
+        return float(actor_loss.item()), float(critic_loss.item())
     
     def save(self, filepath):
         """Save agent state"""
@@ -342,10 +423,14 @@ class ActorCriticAgent:
     def load(self, filepath):
         """Load agent state"""
         if os.path.exists(filepath):
-            checkpoint = torch.load(filepath, map_location=self.device)
+            try:
+                checkpoint = torch.load(filepath, map_location=self.device)
+                self.actor.load_state_dict(checkpoint['actor_state_dict'])
+                self.critic.load_state_dict(checkpoint['critic_state_dict'])
+            except Exception as e:
+                logger.error(f"Error loading checkpoint: {e}")
+                return False
             
-            self.actor.load_state_dict(checkpoint['actor_state_dict'])
-            self.critic.load_state_dict(checkpoint['critic_state_dict'])
             self.target_actor.load_state_dict(checkpoint['target_actor_state_dict'])
             self.target_critic.load_state_dict(checkpoint['target_critic_state_dict'])
             self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])

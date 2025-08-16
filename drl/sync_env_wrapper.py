@@ -133,8 +133,12 @@ class SyncBallBalanceEnv:
                                 response = {'id': request_id, 'result': 'connected', 'error': None}
                                 
                             elif command == 'close':
-                                if self._async_env:
-                                    self._async_env.close()
+                                # Close underlying websocket cleanly within the running event loop
+                                if self._async_env and getattr(self._async_env, 'socket', None):
+                                    try:
+                                        await self._async_env.socket.close()
+                                    except Exception as e:
+                                        logger.warning(f"Error while closing websocket: {e}")
                                 response = {'id': request_id, 'result': None, 'error': None}
                                 self._running = False
                                 break

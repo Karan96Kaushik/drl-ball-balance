@@ -241,31 +241,25 @@ class BallBalanceEnv(gym.Env):
             raise
 
     def compute_reward(self, state, action):
-        """Compute reward based on state and action (now includes action smoothness)"""
-        ball_x, angle, ang_vel = state
-        
-        # Primary reward: keep ball centered
-        center_reward = 1.0 - abs(ball_x)
-        
-        # Penalty for excessive platform motion
-        motion_penalty = 0.3 * abs(ang_vel)
-        
-        # Penalty for extreme platform angles
-        angle_penalty = 0.1 * abs(angle)
-        
-        # Penalty for excessive action magnitude (encourage smooth control)
-        if isinstance(action, np.ndarray):
-            action_value = action[0]
-        else:
-            action_value = action
-        action_penalty = 0.01 * abs(action_value)
-        
-        reward = center_reward - motion_penalty - angle_penalty - action_penalty
-        
-        logger.debug(f"Computed reward: {reward:.3f} (center={center_reward:.3f}, "
-                    f"motion_penalty={motion_penalty:.3f}, angle_penalty={angle_penalty:.3f}, "
-                    f"action_penalty={action_penalty:.3f})")
-        return reward
+        """Compute reward using shared function with robust imports.
+        Falls back to local formula if import isn't available in this context.
+        """
+        try:
+            # Preferred absolute import when running as a package
+            from drl.reward import compute_reward as shared_compute_reward  # type: ignore
+            return float(shared_compute_reward(state, action))
+        except Exception:
+            try:
+                # Fallback when running from project root without package context
+                from reward import compute_reward as shared_compute_reward  # type: ignore
+                return float(shared_compute_reward(state, action))
+            except Exception:
+                # Last-resort inline computation matching drl/reward.py
+                import numpy as np
+                ball_x, angle, ang_vel = state  # noqa: F841
+                center_reward = -abs(float(ball_x)) ** 1.1
+                angle_penalty = (0.1 * abs(float(angle))) ** 1.1
+                return float(center_reward - angle_penalty)
 
     def reset(self, seed=None, options=None):
         """
