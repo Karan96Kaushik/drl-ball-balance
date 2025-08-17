@@ -7,7 +7,9 @@ let state = {
   controlInput: 0
 };
 
-const GRAVITY = 7.81;
+const GRAVITY = 6.81;
+
+// time step use to calculate physics
 const TIME_STEP = 0.016;
 const FRICTION = 0.8;
 const CONTROL_GAIN = 0.003;
@@ -85,6 +87,37 @@ function draw() {
   ctx.fillStyle = "#0f0";
   ctx.fill();
 
+  ctx.restore();
+
+  // Heads-up display (HUD) with key metrics
+  const normalizedBallX = state.ball.x; // [-1, 1]
+  const ballDistance = Math.abs(normalizedBallX);
+  const action = Number(state.controlInput) || 0;
+  const angleDeg = (state.platform.angle * 180) / Math.PI;
+  const angularVelocity = state.platform.angularVelocity;
+  // DRL reward currently: 1 - |ballX|
+  const reward = 1 - Math.min(1, ballDistance);
+
+  // Draw translucent background for readability
+  ctx.save();
+  ctx.font = "14px monospace";
+  const lines = [
+    `Ball X: ${normalizedBallX.toFixed(3)} (|x|=${ballDistance.toFixed(3)})`,
+    `Angle: ${angleDeg.toFixed(1)}°`,
+    `Ang Vel: ${angularVelocity.toFixed(3)}`,
+    `Action: ${action.toFixed(3)}`,
+    `Reward: ${reward.toFixed(3)}`
+  ];
+  const padding = 10;
+  const lineHeight = 18;
+  const boxWidth = 260;
+  const boxHeight = padding * 2 + lines.length * lineHeight;
+  ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+  ctx.fillRect(10, 10, boxWidth, boxHeight);
+  ctx.fillStyle = "#fff";
+  lines.forEach((text, i) => {
+    ctx.fillText(text, 20, 10 + padding + (i + 1) * lineHeight - 4);
+  });
   ctx.restore();
   requestAnimationFrame(draw);
 }

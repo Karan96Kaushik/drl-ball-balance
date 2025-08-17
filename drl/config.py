@@ -26,7 +26,7 @@ EXPLORATION_CONFIG = {
 NETWORK_CONFIG = {
     'state_dim': 3,                  # [ballX, platformAngle, angularVelocity]
     'action_dim': 1,                 # Continuous control value
-    'hidden_sizes': [512, 512, 512],      # Actor/Critic hidden layer sizes
+    'hidden_sizes': [1024, 1024, 1024, 1024],      # Actor/Critic hidden layer sizes
     'actor_lr': 1e-5,                # Actor learning rate
     'critic_lr': 1e-4,               # Critic learning rate
     'gamma': 0.99,                   # Discount factor
@@ -44,7 +44,7 @@ TRAINING_CONFIG = {
     'log_frequency': 10,             # Log progress every N episodes
     'eval_frequency': 10,            # Run evaluation every N episodes
     'loss_drop_threshold': 0.3,      # Threshold for significant loss reduction (30%)
-    'loss_history_window': 50,       # Number of recent losses to track for baseline
+    'loss_history_window': 20,       # Number of recent losses to track for baseline
     'checkpoint_backup_frequency': 5, # Save backup checkpoints every N episodes
     'max_backup_checkpoints': 10,    # Maximum number of backup checkpoints to keep
 }
